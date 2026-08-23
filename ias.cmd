@@ -1013,6 +1013,18 @@ if not defined _fileexist (
 %eline%
 echo Error: IDM did not complete the download trigger.
 echo:
+echo By this point the registration and trial keys have already been removed,
+echo and nothing has been locked to replace them. Leaving the hosts block in
+echo place would stop IDM from reaching its servers to re-establish a trial,
+echo so it is being removed to let IDM recover.
+call :unblock_idm_hosts
+echo:
+echo What to do next:
+echo   1. Start IDM and let it open normally - it rebuilds its trial keys.
+echo   2. Run this script again once IDM is running.
+echo:
+echo Registry backups from this run are in %_wtemp%
+echo:
 echo For help, visit: %repo%
 goto :done
 )
