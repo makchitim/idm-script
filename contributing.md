@@ -46,7 +46,7 @@ Before creating bug reports, please check existing issues to avoid duplicates. W
 The script fails during registry scanning on Windows 11 ARM64 devices.
 
 ### Steps to Reproduce
-1. Run IAS.cmd as administrator on Windows 11 ARM64
+1. Run ias.cmd as administrator on Windows 11 ARM64
 2. Select option [1] Activate IDM
 3. Script crashes during registry scan
 
@@ -197,9 +197,15 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **PATCH**: Backwards-compatible bug fixes
 
 Update version in:
-- `IAS.cmd` (line 1: `@set iasver=X.Y.Z`)
+- `ias.cmd` (line 1: `@set iasver=X.Y.Z`)
 - `README.md` (Version History section)
-- `CHANGELOG.md` (new entry)
+- `CHANGELOG.md` (move `[Unreleased]` to a new dated version entry)
+
+Bump the version as part of the release itself, once changes are merged into
+`main` and pushed — not while work is still on a feature branch. Check Script
+Update [8] compares the local `iasver` against the copy of `ias.cmd` published
+on `main`; bumping it earlier makes that comparison meaningless for anyone
+still running the previously released version.
 
 ## Recognition
 

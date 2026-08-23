@@ -236,7 +236,12 @@ Official IDM Download: [internetdownloadmanager.com](https://www.internetdownloa
 
 ## License
 
-This project is released under the MIT License.
+This project is released under the MIT License — see [LICENSE](LICENSE).
+
+The copyright notice in that file names Md. Omar Faruk Tazul Islam, the
+original author of the upstream project this was forked from (see
+[Author](#author)). MIT requires that notice to stay as-is in any copy or
+fork, which is why it doesn't name this repository's maintainer.
 
 ## Disclaimer
 
