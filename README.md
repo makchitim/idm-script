@@ -1,4 +1,4 @@
-# IDM Activation Script v3.2.0
+# IDM Activation Script v3.3.0
 
 A powerful Windows batch script for activating Internet Download Manager (IDM) with modern UI, custom name registration, and comprehensive tools.
 
@@ -213,6 +213,14 @@ automatically before downloading the installer.
 Official IDM Download: [internetdownloadmanager.com](https://www.internetdownloadmanager.com/download.html)
 
 ## Version History
+
+### v3.3.0 (2026-08-23)
+- **NEW**: IDM host blocking, fully reversible via Reset [3] or Clean Uninstall [7]
+- **FIX**: Clean Uninstall no longer wipes the entire CLSID branch
+- **FIX**: activation deletes stale locked keys first, so it can be run repeatedly
+- **FIX**: all wait loops work non-interactively (`timeout` silently did nothing)
+- **FIX**: self-update validates the download before replacing the running script
+- Menu redesigned to fit the window, with an IDM status line
 
 ### v3.2.0 (2026-02-01)
 - **NEW**: Smart Auto-Update Feature
