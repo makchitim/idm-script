@@ -392,7 +392,7 @@ echo   ------------------------------------------------------------
 echo:
 echo    ACTIVATION
 echo      [1]  Activate IDM
-echo      [2]  Freeze Trial Period          ^<^< recommended
+echo      [2]  Freeze Trial Period
 echo      [3]  Reset Activation / Trial
 echo:
 echo    TOOLS
@@ -448,7 +448,7 @@ set "idm_installer=%SystemRoot%\Temp\idman_setup.exe"
 
 :: Resolve the latest installer name from the official download page
 set "idm_url="
-for /f "delims=" %%a in ('%psc% "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $p = Invoke-WebRequest -Uri 'https://www.internetdownloadmanager.com/download.html' -UseBasicParsing; $m = [regex]::Matches($p.Content, 'idman\d+build\d+\.exe'); if ($m.Count) { 'https://mirror2.internetdownloadmanager.com/' + $m[0].Value } }" %nul6%') do set "idm_url=%%a"
+for /f "delims=" %%a in ('%psc% "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $p = Invoke-WebRequest -Uri 'https://www.internetdownloadmanager.com/download.html' -UseBasicParsing; $m = [regex]::Matches($p.Content, 'idman\d+build\d+\.exe'); if ($m.Count) { 'https://mirror2.internetdownloadmanager.com/' + $m[0].Value } } catch {}" %nul6%') do set "idm_url=%%a"
 
 if not defined idm_url (
 echo   Unable to detect the latest build, falling back to a known one...
@@ -521,6 +521,8 @@ set "user_fname=" & set "user_lname=" & set "user_email="
 set /p "user_fname=   First Name: "
 set /p "user_lname=   Last Name: "
 
+set "user_fname=!user_fname:"=!"
+set "user_lname=!user_lname:"=!"
 if "!user_fname!"=="" set "user_fname=TRIAL"
 if "!user_lname!"=="" set "user_lname=USER"
 if "!user_email!"=="" set "user_email=!user_fname!.!user_lname!@gmail.com"
@@ -547,9 +549,16 @@ echo   ============================================================
 echo:
 
 set "backup_dir=%userprofile%\Documents\IDM_Backup"
-set "backup_file=%backup_dir%\idm_settings_%date:~-4%%date:~3,2%%date:~0,2%.reg"
 
 if not exist "%backup_dir%" mkdir "%backup_dir%"
+
+::  A %date%-substring timestamp assumes a US-style date format and breaks
+::  under other regional settings; it also only has day precision, so a
+::  second backup on the same day silently overwrote the first one.
+set "_bktime="
+for /f "delims=" %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmss')"') do set "_bktime=%%a"
+if not defined _bktime set "_bktime=%random%"
+set "backup_file=%backup_dir%\idm_settings_%_bktime%.reg"
 
 echo   Creating backup of IDM settings...
 echo:
@@ -603,19 +612,36 @@ set /p "restore_choice=   Enter backup number to restore (or 0 to cancel): "
 
 if "%restore_choice%"=="0" goto MainMenu
 
+set "_restore_target="
 set /a idx=0
 for %%f in ("%backup_dir%\*.reg") do (
 set /a idx+=1
-if "!idx!"=="%restore_choice%" (
+if "!idx!"=="%restore_choice%" (set "_restore_target=%%f" & set "_restore_name=%%~nxf")
+)
+
+if not defined _restore_target (
 echo:
-echo   Restoring: %%~nxf
-reg import "%%f" %nul2%
+call :_color %Red% "Invalid selection - no backup matches that number."
+echo:
+echo   ============================================================
+echo:
+echo   Press any key to return to menu...
+pause >nul
+goto MainMenu
+)
+
+echo:
+call :_color %_Yellow% "This overwrites your current IDM registration with: !_restore_name!"
+choice /C:YN /N /M "   Continue? [Y/N]: "
+if !errorlevel!==2 goto MainMenu
+
+echo:
+echo   Restoring: !_restore_name!
+reg import "!_restore_target!" %nul2%
 if !errorlevel!==0 (
 echo   Settings restored successfully!
 ) else (
 echo   Failed to restore settings.
-)
-)
 )
 echo:
 echo   ============================================================
@@ -648,7 +674,7 @@ goto :update_done
 )
 
 set "_newer="
-for /f "delims=" %%a in ('%psc% "try { if ([version]'%latest_ver%' -gt [version]'%iasver%') { 'yes' } }" %nul6%') do set "_newer=%%a"
+for /f "delims=" %%a in ('%psc% "try { if ([version]'%latest_ver%' -gt [version]'%iasver%') { 'yes' } } catch {}" %nul6%') do set "_newer=%%a"
 
 if not "%_newer%"=="yes" (
 echo   You are using the latest version.  [local v%iasver% ^| remote v%latest_ver%]
@@ -671,13 +697,44 @@ echo   [!] Download failed. Please try again later.
 goto :update_done
 )
 
+::  A truncated or corrupted download must not overwrite a working script.
+::  Check size, normalize to CRLF the same way ias.ps1 already does for its
+::  own downloads (raw.githubusercontent.com's line endings are not
+::  guaranteed to match what this repository has stored), then require the
+::  first line to look like an IAS script before anything is installed.
+
+for %%s in ("%update_file%") do set "_upd_size=%%~zs"
+if "%_upd_size%"=="0" (
+del /f /q "%update_file%" %nul2%
+%eline%
+echo Downloaded update file is empty. Please try again later.
+goto :update_done
+)
+
+%psc% "$c = [IO.File]::ReadAllText('%update_file%') -replace '\r?\n', [Environment]::NewLine; if (-not $c.EndsWith([Environment]::NewLine)) { $c += [Environment]::NewLine }; [IO.File]::WriteAllText('%update_file%', $c, [Text.Encoding]::ASCII)" %nul%
+
+set "_upd_ok="
+for /f "delims=" %%a in ('%psc% "Get-Content -Path '%update_file%' -TotalCount 1" %nul6%') do (
+echo %%a | findstr /b /i "@set @echo" %nul1% && set "_upd_ok=1"
+)
+
+if not defined _upd_ok (
+del /f /q "%update_file%" %nul2%
+%eline%
+echo Downloaded file does not look like an IAS script. Update aborted, nothing was changed.
+goto :update_done
+)
+
 echo:
-echo   [OK] Download successful!
+echo   [OK] Download verified!
 echo   [..] Installing update...
 echo:
 
-:: Create updater script
+:: Create updater script. A copy of the currently running script is kept at
+:: %_prev% in case the update needs to be undone by hand.
 set "updater=%temp%\updater.cmd"
+set "_prev=%temp%\ias_previous.cmd"
+copy /y "%~f0" "%_prev%" %nul1%
 (
 echo @echo off
 echo timeout /t 2 /nobreak ^>nul
@@ -685,6 +742,10 @@ echo move /y "%update_file%" "%~f0" ^>nul
 echo start "" "%~f0"
 echo del "%%~f0"
 ) > "%updater%"
+
+echo   A copy of the previous script was kept at:
+echo   %_prev%
+echo:
 
 :: Run updater and exit
 start "" "%updater%"
@@ -1024,9 +1085,19 @@ echo:
 if not defined user_fname set "user_fname=User"
 if not defined user_lname set "user_lname=IDM"
 if not defined user_email set "user_email=!user_fname!.!user_lname!@gmail.com"
-set "fname=!user_fname!"
-set "lname=!user_lname!"
-set "email=!user_email!"
+
+::  Strip the quote character before these values are embedded in a quoted
+::  reg.exe argument below. cmd.exe treats &, |, etc. as literal text while
+::  inside balanced quotes, but a stray " in the typed name would unbalance
+::  them and expose the rest of the line to the shell. Registration fields
+::  are typed by the person running the script, so this is defense in depth
+::  against a stray keystroke rather than a hostile third party.
+set "fname=!user_fname:"=!"
+set "lname=!user_lname:"=!"
+set "email=!user_email:"=!"
+if "!fname!"=="" set "fname=User"
+if "!lname!"=="" set "lname=IDM"
+if "!email!"=="" set "email=!fname!.!lname!@gmail.com"
 
 for /f "delims=" %%a in ('%psc% "$key = -join ((Get-Random -Count 20 -InputObject ([char[]]('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'))));$key = ($key.Substring(0, 5) + '-' + $key.Substring(5, 5) + '-' + $key.Substring(10, 5) + '-' + $key.Substring(15, 5));Write-Output $key" %nul6%') do (set key=%%a)
 
