@@ -61,7 +61,6 @@ exit /b
 
 ::========================================================================================================================================
 
-set "blank="
 set "repo=https://github.com/imrosyd/idm-script"
 
 ::  Check if Null service is working, it's important for the batch script
@@ -132,7 +131,6 @@ for /F %%a in ('echo prompt $E ^| cmd') do set "esc=%%a"
 set     "Red="41;97m""
 set    "Gray="100;97m""
 set   "Green="42;97m""
-set    "Blue="44;97m""
 set  "_White="40;37m""
 set  "_Green="40;92m""
 set "_Yellow="40;93m""
@@ -140,7 +138,6 @@ set "_Yellow="40;93m""
 set     "Red="Red" "white""
 set    "Gray="Darkgray" "white""
 set   "Green="DarkGreen" "white""
-set    "Blue="Blue" "white""
 set  "_White="Black" "Gray""
 set  "_Green="Black" "Green""
 set "_Yellow="Black" "Yellow""
@@ -179,7 +176,6 @@ set "_batp=%_batf:'=''%"
 set _PSarg="""%~f0""" -el %_args%
 set _PSarg=%_PSarg:'=''%
 
-set "_appdata=%appdata%"
 set "_ttemp=%userprofile%\AppData\Local\Temp"
 
 setlocal EnableDelayedExpansion
@@ -610,6 +606,10 @@ echo      [!count!] %%~nxf
 echo:
 set /p "restore_choice=   Enter backup number to restore (or 0 to cancel): "
 
+::  A stray " here would unbalance the quotes in the comparison below and
+::  expose the rest of the line to cmd.exe as a live command separator.
+set "restore_choice=!restore_choice:"=!"
+
 if "%restore_choice%"=="0" goto MainMenu
 
 set "_restore_target="
@@ -797,7 +797,9 @@ reg delete "HKLM\SOFTWARE\Internet Download Manager" /f %nul2%
 reg delete "HKLM\SOFTWARE\Wow6432Node\Internet Download Manager" /f %nul2%
 
 ::  Only remove the CLSID keys IDM created. Deleting the whole CLSID branch
-::  would break COM registration for every other 32-bit application.
+::  would break COM registration for every other 32-bit application. Backed
+::  up first, same as Activate and Reset.
+call :create_clsid_backup
 echo   Removing IDM trial keys from CLSID...
 call :regscan_delete
 
