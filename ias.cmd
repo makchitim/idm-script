@@ -1149,8 +1149,10 @@ for /f %%C in ('reg query "%_clsid_reg%" 2^>nul ^| find /c "HKEY_"') do set /a _
 echo Baseline CLSID key count: %_base_count%
 
 ::  IDM's own domains are blocked at this point, so pull from neutral hosts.
-::  First one that works wins.
-set link=https://raw.githubusercontent.com/imrosyd/idm-script/main/LICENSE
+::  First one that works wins. The primary source is a 68-byte PNG this
+::  repository hosts specifically for this purpose - unlike a third-party
+::  favicon, its path and content are ours to keep stable.
+set link=https://raw.githubusercontent.com/imrosyd/idm-script/main/assets/trigger.png
 call :download
 if defined _fileexist goto :dl_done
 

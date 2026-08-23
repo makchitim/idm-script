@@ -187,8 +187,12 @@ automatically before downloading the installer.
 
 ### Network Connections
 
-- `github.com` / `raw.githubusercontent.com` — connectivity check, test download, update check [8]
-- `www.google.com` — fallback test download
+- `github.com` / `raw.githubusercontent.com` — connectivity check, update check [8], and the
+  trigger download during activation. That download pulls
+  [`assets/trigger.png`](assets/trigger.png), a 68-byte 1x1 PNG this repository hosts
+  specifically for this purpose — its only job is to get IDM to write fresh CLSID keys
+  that can then be locked. Nothing about it is read or kept.
+- `www.google.com` / `github.com` favicons — fallback trigger download if the above fails
 - `mirror2.internetdownloadmanager.com` — IDM installer, menu [4] only
 
 ## Compatibility
