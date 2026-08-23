@@ -1164,7 +1164,6 @@ if %_new_count% GTR %_base_count% (
 echo New CLSID keys created, activation hooks detected.
 set _fileexist=1
 )
-if not defined _fileexist if %_new_count% GTR 0 set _fileexist=1
 exit /b
 
 :download
@@ -1283,7 +1282,7 @@ set _hostsbak=1
 for /f %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do copy /y "%_hosts%" "%_wtemp%\_Backup_hosts_%%a.txt" %nul%
 )
 
-%psc% "$h='%_hosts%'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; foreach($x in $d){ $new+=('0.0.0.0 '+$x+'  # IAS') }; Set-Content -LiteralPath $h -Value $new -Encoding ASCII -ErrorAction Stop" %nul%
+%psc% "$h='%_hosts%'; $t=$h+'.ias_tmp'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; foreach($x in $d){ $new+=('0.0.0.0 '+$x+'  # IAS') }; Set-Content -LiteralPath $t -Value $new -Encoding ASCII -ErrorAction Stop; Move-Item -LiteralPath $t -Destination $h -Force -ErrorAction Stop" %nul%
 
 if errorlevel 1 (
 call :_color %Red% "Failed to write hosts file - is it locked by antivirus?"
@@ -1311,7 +1310,7 @@ if not exist "%_hosts%" exit /b
 
 attrib -R "%_hosts%" %nul1%
 
-%psc% "$h='%_hosts%'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; if($new.Count -ne $c.Count){ Set-Content -LiteralPath $h -Value $new -Encoding ASCII -ErrorAction SilentlyContinue }" %nul%
+%psc% "$h='%_hosts%'; $t=$h+'.ias_tmp'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; if($new.Count -ne $c.Count){ Set-Content -LiteralPath $t -Value $new -Encoding ASCII -ErrorAction SilentlyContinue; if(Test-Path -LiteralPath $t){ Move-Item -LiteralPath $t -Destination $h -Force -ErrorAction SilentlyContinue } }" %nul%
 
 ipconfig /flushdns %nul%
 exit /b
@@ -1321,9 +1320,9 @@ exit /b
 :regscan:
 $finalValues = @()
 
-::  Privileges are adjusted once here rather than per key. Doing it inside
-::  Take-Permissions meant re-creating the P/Invoke type for every single key,
-::  which is where the intermittent lock failures came from.
+#  Privileges are adjusted once here rather than per key. Doing it inside
+#  Take-Permissions meant re-creating the P/Invoke type for every single key,
+#  which is where the intermittent lock failures came from.
 
 $AssemblyBuilder = [AppDomain]::CurrentDomain.DefineDynamicAssembly(4, 1)
 $ModuleBuilder = $AssemblyBuilder.DefineDynamicModule(2, $False)
