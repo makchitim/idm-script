@@ -4,10 +4,9 @@ A powerful Windows batch script for activating Internet Download Manager (IDM) w
 
 ## Features
 
-- **Modern Visual Interface**
-  - ASCII Art Banner with "IDM SCRIPT" logo
+- **Clean Interface**
   - Categorized menu layout (Activation, Tools, Other)
-  - Emoji icons and Unicode box styling
+  - Status line shows whether IDM is installed and registered before you choose
 
 - **Activation Options**
   - Custom Name Registration (enter your own name)
@@ -46,17 +45,35 @@ irm s.id/idm-script | iex
 2. Right-click → **"Run as administrator"**
 3. Choose from menu:
 
-| Activation | Tools | Other |
-|------------|-------|-------|
-| [1] Activate IDM | [4] Install/Update | [7] Clean Uninstall |
-| [2] Freeze Trial ⭐ | [5] Backup | [8] Check Update |
-| [3] Reset | [6] Restore | [H] Help |
-|  |  | [0] Exit |
+```
+   IDM 6.42 build 25  |  Not registered
+  ------------------------------------------------------------
+
+   ACTIVATION
+     [1]  Activate IDM
+     [2]  Freeze Trial Period
+     [3]  Reset Activation / Trial
+
+   TOOLS
+     [4]  Install / Update IDM
+     [5]  Backup Settings
+     [6]  Restore Settings
+
+   OTHER
+     [7]  Clean Uninstall IDM
+     [8]  Check Script Update
+     [H]  Help / Documentation
+     [0]  Exit
+```
+
+The status line reflects whether IDM is installed and registered before you pick
+anything.
 
 **When selecting Activate IDM:**
 - You will be prompted to enter your First Name and Last Name
 - These details will appear in IDM's registration info
 - Press Enter without typing to use default values
+- A stray `"` in the name is stripped automatically before it reaches the registry
 
 ## How It Works
 
@@ -69,6 +86,32 @@ irm s.id/idm-script | iex
 
 Steps 3 and 6 are why activation can now be run repeatedly. Earlier versions locked
 the keys without deleting the old ones first, so a second run had nothing to work with.
+
+## Backup & Restore
+
+- **[5] Backup Settings** exports `HKCU\Software\DownloadManager` to
+  `%userprofile%\Documents\IDM_Backup\idm_settings_<timestamp>.reg`, timestamped to
+  the second so running it twice in one day keeps both backups instead of the second
+  silently overwriting the first.
+- **[6] Restore Settings** lists every `.reg` file in that folder, then asks for
+  confirmation before overwriting your current registration. Picking a number with no
+  matching backup reports "Invalid selection" instead of doing nothing silently.
+
+This is separate from the CLSID backup that activation makes automatically on every
+run — see [What Gets Changed On Your System](#what-gets-changed-on-your-system).
+
+## Updating the Script
+
+**[8] Check Script Update** compares the local version against
+`raw.githubusercontent.com/imrosyd/idm-script`. Before installing anything it:
+
+- Rejects the download if it came back empty
+- Normalizes line endings to CRLF, since GitHub does not guarantee the same line
+  endings the repository has stored
+- Requires the first line to look like an IAS script
+
+A copy of the script you were running is kept at `%TEMP%\ias_previous.cmd` in case you
+ever need to roll an update back by hand.
 
 ## Recommendations
 
