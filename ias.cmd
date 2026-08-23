@@ -737,7 +737,7 @@ set "_prev=%temp%\ias_previous.cmd"
 copy /y "%~f0" "%_prev%" %nul1%
 (
 echo @echo off
-echo timeout /t 2 /nobreak ^>nul
+echo ping 127.0.0.1 -n 3 ^>nul
 echo move /y "%update_file%" "%~f0" ^>nul
 echo start "" "%~f0"
 echo del "%%~f0"
@@ -963,7 +963,7 @@ echo:
 echo Connection attempt %_retry% failed. Retrying...
 :: Flush DNS cache and retry
 ipconfig /flushdns %nul2%
-timeout /t 2 %nul1%
+ping 127.0.0.1 -n 3 %nul%
 goto :internet_check
 )
 echo:
@@ -1058,7 +1058,7 @@ call :_color %Gray% "Note: If IDM shows registration popup, try reinstalling IDM
 echo %line%
 echo:
 echo:
-if %_unattended%==1 timeout /t 2 & exit /b
+if %_unattended%==1 ping 127.0.0.1 -n 3 %nul% & exit /b
 
 if defined terminal (
 call :_color %_Yellow% "Press 0 key to return to menu..."
@@ -1071,7 +1071,7 @@ goto MainMenu
 
 :done2
 
-if %_unattended%==1 timeout /t 2 & exit /b
+if %_unattended%==1 ping 127.0.0.1 -n 3 %nul% & exit /b
 
 if defined terminal (
 echo Press 0 key to exit...
@@ -1164,7 +1164,7 @@ call :download
 :dl_done
 
 echo:
-timeout /t 3 %nul1%
+ping 127.0.0.1 -n 4 %nul%
 %idmcheck% && taskkill /f /im idman.exe
 if exist "%file%" del /f /q "%file%"
 
@@ -1186,7 +1186,7 @@ start "" /B "%IDMan%" /n /d "%link%" /p "%_wtemp%" /f ias_temp.png
 
 :check_file
 
-timeout /t 1 %nul1%
+ping 127.0.0.1 -n 2 %nul%
 set /a attempt+=1
 if exist "%file%" set _fileexist=1&exit /b
 if %attempt% GEQ 25 exit /b
