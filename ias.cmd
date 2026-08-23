@@ -371,37 +371,42 @@ if %_freeze%==1 (set frz=1&goto :_activate)
 cls
 set "_skipprompt="
 title  IDM Activation Script %iasver%
-if not defined terminal mode 76, 28
+if not defined terminal mode 76, 29
+
+::  Lightweight status line - existing lookups only, nothing new is queried.
+
+set "_mstatus=Not installed"
+if exist "%IDMan%" (
+set "_mstatus=Installed, not registered"
+reg query "HKU\%_sid%\Software\DownloadManager" /v Serial %nul% && set "_mstatus=Installed and registered"
+)
 
 echo:
-echo:
-echo   ===============================================
-call :_color %_Green% "       I D M   A C T I V A T I O N   S C R I P T"
-echo   ===============================================
-echo:
-echo   Version: %iasver%  -  github.com/imrosyd/idm-script
-echo:
 echo   ============================================================
-echo:
-echo   --- ACTIVATION -----------------------------------------
-echo       [1] Activate IDM
-echo       [2] Freeze Trial Period
-echo       [3] Reset Activation / Trial
-echo:
-echo   --- TOOLS ----------------------------------------------
-echo       [4] Install / Update IDM
-echo       [5] Backup Settings
-echo       [6] Restore Settings
-echo:
-echo   --- OTHER ----------------------------------------------
-echo       [7] Clean Uninstall IDM
-echo       [8] Check Script Update
-echo       [H] Help / Documentation
-echo       [0] Exit
-echo:
+call :_color %_Green% "         I D M   A C T I V A T I O N   S C R I P T"
 echo   ============================================================
+echo    v%iasver%                      github.com/imrosyd/idm-script
+echo   ------------------------------------------------------------
+echo    %_mstatus%
+echo   ------------------------------------------------------------
 echo:
-echo   Enter your choice: 
+echo    ACTIVATION
+echo      [1]  Activate IDM
+echo      [2]  Freeze Trial Period          ^<^< recommended
+echo      [3]  Reset Activation / Trial
+echo:
+echo    TOOLS
+echo      [4]  Install / Update IDM
+echo      [5]  Backup Settings
+echo      [6]  Restore Settings
+echo:
+echo    OTHER
+echo      [7]  Clean Uninstall IDM
+echo      [8]  Check Script Update
+echo      [H]  Help / Documentation
+echo      [0]  Exit
+echo   ============================================================
+echo    Enter your choice [1-8, H, 0]:
 choice /C:12345678H0 /N
 set _erl=%errorlevel%
 
