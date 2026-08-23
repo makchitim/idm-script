@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Clean Uninstall no longer wipes the whole CLSID branch.** It used to run
+  `reg delete "HKCU\Software\Classes\Wow6432Node\CLSID" /f`, which removes the COM
+  registration of every 32-bit application for that user. It now reuses the same
+  targeted registry scanner as Reset and deletes only the keys IDM created, and it
+  also cleans `HKU\<sid>\Software\DownloadManager` when HKCU is not synced.
+- **Install / Update [4] no longer dead-ends after activation.** It called `:_activate`,
+  which never returns (it falls through to `:done`), so everything after the call was
+  unreachable and `_unattended=1` made the script exit instead of returning to the menu.
+  It now jumps to `:_activate` with a new `_skipprompt` flag so the name is asked once.
+- **Update check compares versions numerically** using `[version]` instead of string
+  equality, so an older remote version is no longer reported as an available update.
+- **Restore Settings** pointed users at option `[6]` to create a backup; it is `[5]`.
+- **Registry permission handling no longer aborts the scan.** `RtlAdjustPrivilege` is
+  now set up once instead of rebuilding the P/Invoke type for every key, `Take-Permissions`
+  returns early on a null key, and the whole routine is wrapped in try/catch, so one
+  protected key cannot stop the scan. Ported from upstream v3.1.1.
+
+### Added
+- **IDM host blocking**, ported from upstream and extended. Activation points the nine
+  IDM validation domains at `0.0.0.0` so IDM cannot phone home and revoke the serial.
+  Unlike upstream this is reversible: every line carries a `# IAS` marker, the original
+  hosts file is backed up to `%SystemRoot%\Temp` before the first change of each run,
+  and both Reset [3] and Clean Uninstall [7] remove the entries again. The rewrite is
+  line by line, so hosts entries the user added themselves are preserved.
+- **Helper subroutines** `:prepare_operation_ui`, `:create_clsid_backup`,
+  `:regscan_delete`, `:regscan_lock`, `:regscan_lock_toggle`, `:block_idm_hosts`,
+  `:unblock_idm_hosts` — replacing blocks that were copy-pasted between Activate,
+  Reset and Clean Uninstall.
+
+### Changed
+- **Activation is now a five-step flow** matching upstream: block hosts, delete every
+  existing CLSID key (including stale locked ones from an earlier run), write the
+  serial, trigger the download, then lock. Previously the keys were locked without
+  being deleted first, so a second activation run had nothing left to work with.
+- **Test downloads pull from neutral hosts** (`raw.githubusercontent.com`,
+  `google.com`, `github.com`) instead of IDM's own servers, which are blocked at that
+  point, and success is now confirmed by counting CLSID keys before and after the run
+  rather than by the presence of the downloaded file alone.
+- **Connectivity check probes `github.com`** instead of `internetdownloadmanager.com`,
+  which the script blocks on purpose.
+- **Install / Update [4] lifts the hosts block** before downloading the installer.
+- Registry backups go to `%_wtemp%`, which falls back from `%SystemRoot%\Temp` to
+  `%TEMP%` if the first is not writable.
+- Argument parsing uses `%%~A` over `%*` instead of stripping every quote from `%*`.
+- All embedded PowerShell is invoked through `. ([scriptblock]::create(...))` instead
+  of `iex`.
+- Dropped the dead `+ $key.Substring(20)` from serial generation — on a 20-character
+  string it always produced an empty string, a leftover from a 25-character version.
+
+### Changed (earlier in this cycle)
+- **Install / Update [4] resolves the current IDM build** from the official download
+  page instead of using a hardcoded `idman642build25.exe`, falling back to that build
+  if the page cannot be parsed.
+- **`ias.ps1` warns instead of staying silent when integrity is not verified.** With no
+  `-ExpectedHash` (the default for `irm ... | iex`), it now says so explicitly, and it
+  refuses any download URL that is not `https://`.
+- Documentation: corrected the line-count and version figures in `project_summary.md`,
+  and replaced the inaccurate "no external server communication" claim in both
+  `README.md` and `project_summary.md` with the actual list of hosts contacted.
+
+---
+
 ## [3.2.0] - 2026-02-01
 
 ### Added
@@ -126,6 +191,7 @@ The script combines the best practices and features from multiple activation app
 
 ---
 
+[Unreleased]: https://github.com/imrosyd/idm-script/compare/v3.2.0...HEAD
 [3.2.0]: https://github.com/imrosyd/idm-script/releases/tag/v3.2.0
 [3.1.0]: https://github.com/imrosyd/idm-script/releases/tag/v3.1.0
 [3.0.0]: https://github.com/imrosyd/idm-script/releases/tag/v3.0.0

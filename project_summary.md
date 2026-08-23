@@ -8,7 +8,7 @@ A professional Windows batch script for IDM activation with modern UI, custom na
 
 ```
 idm-script/
-├── ias.cmd                  # Main activation script (1200+ lines)
+├── ias.cmd                  # Main activation script (~1290 lines)
 ├── ias.ps1                  # PowerShell download wrapper
 ├── README.md                # Complete project documentation
 ├── LICENSE                  # MIT License
@@ -25,7 +25,7 @@ idm-script/
 ## ✨ Core Features
 
 ### ias.cmd - Main Script
-- **1200+ lines** of professional batch code
+- **~1290 lines** of batch code with an embedded PowerShell registry engine
 - **ASCII Art Banner** with "IDM SCRIPT" logo
 - **Modern box-styled menu** with Unicode characters & emojis
 - **Streamlined Menu Options:**
@@ -69,6 +69,8 @@ ias.cmd         # Run with full menu interface
 
 ### Safety Features
 - Registry backups before any changes
+- hosts file backed up before the first modification of each run
+- Every hosts entry marked `# IAS`, and fully removed by Reset [3] / Clean Uninstall [7]
 - Administrator privilege enforcement
 - PowerShell execution validation
 - WMI functionality check
@@ -80,7 +82,7 @@ ias.cmd         # Run with full menu interface
 | Metric | Value |
 |--------|-------|
 | **Total Files** | 7 |
-| **Code Lines (ias.cmd)** | 950+ |
+| **Code Lines (ias.cmd)** | ~1290 |
 | **Documentation Files** | 4 |
 | **Supported Windows Versions** | 6 (7/8/8.1/10/11/Server) |
 | **Supported Architectures** | 3 (x86/x64/ARM64) |
@@ -147,7 +149,7 @@ Community contribution guide:
 
 ### LICENSE
 MIT License terms:
-- Copyright 2025 Md. Omar Faruk Tazul Islam
+- Copyright 2025 Md. Omar Faruk Tazul Islam (upstream author, retained for the fork)
 - Permission to use, modify, distribute
 - No warranty disclaimer
 
@@ -189,11 +191,21 @@ irm https://raw.githubusercontent.com/imrosyd/idm-script/main/ias.ps1 | iex
 - ✅ Creates backup files automatically
 - ✅ Requires explicit admin privileges
 - ✅ All operations are transparent
-- ✅ No network calls (except IDM's own servers for testing)
+
+### Network Connections It Makes
+- 🌐 `github.com` / `raw.githubusercontent.com` — connectivity check, test download, update check [8]
+- 🌐 `www.google.com` — fallback test download
+- 🌐 `mirror2.internetdownloadmanager.com` — IDM installer, menu [4] only
+
+### System Changes It Makes
+- 📝 CLSID registry keys under `HKCU\Software\Classes\Wow6432Node\CLSID`
+- 📝 `HKCU\Software\DownloadManager` registration values
+- 📝 **hosts file** — 9 IDM validation domains pointed at `0.0.0.0`, marked `# IAS`,
+  removed again by Reset [3] or Clean Uninstall [7]
 
 ### What the Script Does NOT Do
 - ❌ No data collection
-- ❌ No external server communication
+- ❌ No telemetry or reporting back to any server
 - ❌ No malware or unwanted software
 - ❌ No hidden functionality
 - ❌ No user tracking
@@ -206,7 +218,7 @@ irm https://raw.githubusercontent.com/imrosyd/idm-script/main/ias.ps1 | iex
 - Multi-language support
 - GUI version (optional)
 - Portable exe wrapper
-- Auto-update mechanism
+- Published SHA256 checksum so `ias.ps1` can verify what it downloads
 
 ### Community Requests
 Issues and feature requests are welcome at:
@@ -250,7 +262,8 @@ This script is provided for **educational purposes only**. Users should purchase
 ### License
 MIT License - See [LICENSE](LICENSE) for full text.
 
-**Copyright © 2025 Md. Omar Faruk Tazul Islam**
+**Copyright © 2025 Md. Omar Faruk Tazul Islam** — this project is a fork, so the
+upstream MIT copyright notice is kept intact in [LICENSE](LICENSE).
 
 ---
 
@@ -267,6 +280,6 @@ If you find this project useful, please consider:
 
 ---
 
-**Last Updated:** February 01, 2026  
-**Version:** 3.1.0  
+**Last Updated:** August 23, 2026  
+**Version:** 3.2.0  
 **Status:** Active Development

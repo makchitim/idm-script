@@ -103,14 +103,11 @@ set _elev=
 set _unattended=0
 
 set _args=%*
-if defined _args set _args=%_args:"=%
-if defined _args (
-for %%A in (%_args%) do (
-if /i "%%A"=="-el"  set _elev=1
-if /i "%%A"=="/res" set _reset=1
-if /i "%%A"=="/frz" set _freeze=1
-if /i "%%A"=="/act" set _activate=1
-)
+for %%A in (%*) do (
+if /i "%%~A"=="-el"  set _elev=1
+if /i "%%~A"=="/res" set _reset=1
+if /i "%%~A"=="/frz" set _freeze=1
+if /i "%%~A"=="/act" set _activate=1
 )
 
 for %%A in (%_activate% %_freeze% %_reset%) do (if "%%A"=="1" set _unattended=1)
@@ -206,7 +203,7 @@ goto done2
 
 REM :PowerShellTest: $ExecutionContext.SessionState.LanguageMode :PowerShellTest:
 
-%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':PowerShellTest:\s*';iex ($f[1])" | find /i "FullLanguage" %nul1% || (
+%psc% "$f=[io.file]::ReadAllText('!_batp!') -split ':PowerShellTest:\s*'; . ([scriptblock]::create($f[1]))" | find /i "FullLanguage" %nul1% || (
 %eline%
 echo PowerShell is not working. Please run:
 echo Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force
@@ -335,7 +332,19 @@ if %arch%==x64 set "IDMan=%ProgramFiles(x86)%\Internet Download Manager\IDMan.ex
 if %arch%==x86 set "IDMan=%ProgramFiles%\Internet Download Manager\IDMan.exe"
 )
 
-if not exist %SystemRoot%\Temp md %SystemRoot%\Temp
+::  Working folder for registry backups and IDM test downloads, with fallbacks
+
+set "_wtemp=%SystemRoot%\Temp"
+if not exist "%_wtemp%" md "%_wtemp%" %nul%
+if not exist "%_wtemp%" set "_wtemp=%TEMP%"
+if not exist "%_wtemp%" set "_wtemp=%_ttemp%"
+if not exist "%_wtemp%" md "%_wtemp%" %nul%
+
+::  IDM validation servers, blocked during activation and restored on reset
+
+set "_hosts=%SystemRoot%\System32\drivers\etc\hosts"
+set "_idmdom=@('tonec.com','www.tonec.com','internetdownloadmanager.com','www.internetdownloadmanager.com','secure.internetdownloadmanager.com','idmmzs.com','www.idmmzs.com','idmzs.com','www.idmzs.com')"
+
 set "idmcheck=tasklist /fi "imagename eq idman.exe" | findstr /i "idman.exe" %nul1%"
 
 ::  Check CLSID registry access
@@ -360,6 +369,7 @@ if %_freeze%==1 (set frz=1&goto :_activate)
 :MainMenu
 
 cls
+set "_skipprompt="
 title  IDM Activation Script %iasver%
 if not defined terminal mode 76, 28
 
@@ -420,14 +430,29 @@ echo:
 echo   Terminating IDM process...
 taskkill /f /im idman.exe >nul 2>&1
 
+::  The installer is served from an IDM domain that activation blocks in the
+::  hosts file. Lift the block so the download can go through; activation
+::  puts it back afterwards.
+call :unblock_idm_hosts
+
 echo:
 echo   Downloading IDM installer from official website...
 echo:
 
 set "idm_installer=%SystemRoot%\Temp\idman_setup.exe"
 
-:: Download IDM installer using PowerShell
-powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://mirror2.internetdownloadmanager.com/idman642build25.exe' -OutFile '%idm_installer%' -UseBasicParsing; Write-Host 'Download successful' } catch { Write-Host 'Download failed' }"
+:: Resolve the latest installer name from the official download page
+set "idm_url="
+for /f "delims=" %%a in ('%psc% "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $p = Invoke-WebRequest -Uri 'https://www.internetdownloadmanager.com/download.html' -UseBasicParsing; $m = [regex]::Matches($p.Content, 'idman\d+build\d+\.exe'); if ($m.Count) { 'https://mirror2.internetdownloadmanager.com/' + $m[0].Value } }" %nul6%') do set "idm_url=%%a"
+
+if not defined idm_url (
+echo   Unable to detect the latest build, falling back to a known one...
+set "idm_url=https://mirror2.internetdownloadmanager.com/idman642build25.exe"
+)
+
+echo   Source: !idm_url!
+echo:
+%psc% "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!idm_url!' -OutFile '%idm_installer%' -UseBasicParsing; Write-Host 'Download successful' } catch { Write-Host 'Download failed' }"
 
 if not exist "%idm_installer%" (
 echo:
@@ -487,6 +512,7 @@ echo:
 echo:
 echo   Enter registration details:
 echo:
+set "user_fname=" & set "user_lname=" & set "user_email="
 set /p "user_fname=   First Name: "
 set /p "user_lname=   Last Name: "
 
@@ -498,19 +524,11 @@ echo:
 echo   Activating IDM...
 echo:
 
-:: Call activation function
+:: Hand over to the activation routine, it ends at :done and returns to the menu.
+:: _skipprompt keeps it from asking for the name a second time.
 set "frz=0"
-set "_unattended=1"
-call :_activate
-
-echo:
-echo   [OK] Auto-activation completed!
-echo:
-echo   ============================================================
-echo:
-echo   Press any key to return to menu...
-pause >nul
-goto MainMenu
+set "_skipprompt=1"
+goto :_activate
 
 ::========================================================================================================================================
 
@@ -564,7 +582,7 @@ set "backup_dir=%userprofile%\Documents\IDM_Backup"
 if not exist "%backup_dir%\*.reg" (
 echo   No backup files found in %backup_dir%
 echo:
-echo   Please create a backup first using option [6].
+echo   Please create a backup first using option [5].
 goto done
 )
 
@@ -624,8 +642,11 @@ echo   Unable to check for updates. Check your internet connection.
 goto :update_done
 )
 
-if "%latest_ver%"=="%iasver%" (
-echo   You are using the latest version!
+set "_newer="
+for /f "delims=" %%a in ('%psc% "try { if ([version]'%latest_ver%' -gt [version]'%iasver%') { 'yes' } }" %nul6%') do set "_newer=%%a"
+
+if not "%_newer%"=="yes" (
+echo   You are using the latest version.  [local v%iasver% ^| remote v%latest_ver%]
 goto :update_done
 )
 
@@ -705,9 +726,18 @@ start "" /wait "%ProgramFiles%\Internet Download Manager\Uninstall.exe" /S
 
 echo   Cleaning registry...
 reg delete "HKCU\Software\DownloadManager" /f %nul2%
+if not %HKCUsync%==1 reg delete "HKU\%_sid%\Software\DownloadManager" /f %nul2%
 reg delete "HKLM\SOFTWARE\Internet Download Manager" /f %nul2%
 reg delete "HKLM\SOFTWARE\Wow6432Node\Internet Download Manager" /f %nul2%
-reg delete "%CLSID%" /f %nul2%
+
+::  Only remove the CLSID keys IDM created. Deleting the whole CLSID branch
+::  would break COM registration for every other 32-bit application.
+echo   Removing IDM trial keys from CLSID...
+call :regscan_delete
+
+::  A full uninstall must leave the hosts file as it was found.
+echo   Restoring hosts file...
+call :unblock_idm_hosts
 
 echo   Removing data folders...
 if exist "%appdata%\IDM" rd /s /q "%appdata%\IDM" %nul2%
@@ -724,27 +754,19 @@ goto MainMenu
 :_reset
 
 cls
-if not %HKCUsync%==1 (
-if not defined terminal mode 153, 35
-) else (
-if not defined terminal mode 113, 35
-)
-if not defined terminal %psc% "&%_buf%" %nul%
+call :prepare_operation_ui
 
 echo:
 %idmcheck% && taskkill /f /im idman.exe
 
-set _time=
-for /f %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do set _time=%%a
-
-echo:
-echo Creating backup of CLSID registry keys in %SystemRoot%\Temp
-
-reg export %CLSID% "%SystemRoot%\Temp\_Backup_HKCU_CLSID_%_time%.reg"
-if not %HKCUsync%==1 reg export %CLSID2% "%SystemRoot%\Temp\_Backup_HKU-%_sid%_CLSID_%_time%.reg"
+call :create_clsid_backup
 
 call :delete_queue
-%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = $null; $deleteKey = 1; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*';iex ($f[1])"
+call :regscan_delete
+
+::  Reset means a clean slate, so the hosts block has to come off too.
+::  Leaving it would cut IDM off from its own servers indefinitely.
+call :unblock_idm_hosts
 
 call :add_key
 
@@ -813,14 +835,9 @@ exit /b
 :_activate
 
 cls
-if not %HKCUsync%==1 (
-if not defined terminal mode 153, 35
-) else (
-if not defined terminal mode 113, 35
-)
-if not defined terminal %psc% "&%_buf%" %nul%
+call :prepare_operation_ui
 
-if %frz%==0 if %_unattended%==0 (
+if %frz%==0 if %_unattended%==0 if not defined _skipprompt (
 echo:
 echo %line%
 echo:
@@ -837,6 +854,7 @@ echo %line%
 echo:
 call :_color %_Green% "Enter Registration Details:"
 echo:
+set "user_fname=" & set "user_lname=" & set "user_email="
 set /p "user_fname=First Name: "
 set /p "user_lname=Last Name: "
 if "!user_fname!"=="" set "user_fname=User"
@@ -857,17 +875,18 @@ echo You can download it from: https://www.internetdownloadmanager.com/download.
 goto done
 )
 
-:: Internet check with internetdownloadmanager.com ping and port 80 test
+:: Connectivity check. IDM's own domains get blocked in the hosts file as part
+:: of activation, so probe a neutral host instead of internetdownloadmanager.com.
 
 set _int=
 set _retry=0
 
 :internet_check
 set /a _retry+=1
-for /f "delims=[] tokens=2" %%# in ('ping -n 1 internetdownloadmanager.com') do (if not [%%#]==[] set _int=1)
+for /f "delims=[] tokens=2" %%# in ('ping -n 1 github.com') do (if not [%%#]==[] set _int=1)
 
 if not defined _int (
-%psc% "$t = New-Object Net.Sockets.TcpClient;try{$t.Connect("""internetdownloadmanager.com""", 80)}catch{};$t.Connected" | findstr /i "true" %nul1% && set _int=1
+%psc% "$t = New-Object Net.Sockets.TcpClient;try{$t.Connect('github.com', 443)}catch{};$t.Connected" | findstr /i "true" %nul1% && set _int=1
 )
 
 if not defined _int (
@@ -880,7 +899,7 @@ timeout /t 2 %nul1%
 goto :internet_check
 )
 echo:
-call :_color %Red% "Unable to connect to internetdownloadmanager.com after 3 attempts."
+call :_color %Red% "No internet connection after 3 attempts."
 echo:
 echo Please check:
 echo   - Your internet connection
@@ -904,32 +923,40 @@ echo Checking System Info - [%regwinos% ^| Build %fullbuild% ^| %regarch% ^| IDM
 
 %idmcheck% && (echo: & taskkill /f /im idman.exe)
 
-set _time=
-for /f %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do set _time=%%a
-
-echo:
-echo Creating backup of CLSID registry keys in %SystemRoot%\Temp
-
-reg export %CLSID% "%SystemRoot%\Temp\_Backup_HKCU_CLSID_%_time%.reg"
-if not %HKCUsync%==1 reg export %CLSID2% "%SystemRoot%\Temp\_Backup_HKU-%_sid%_CLSID_%_time%.reg"
+call :create_clsid_backup
 
 call :delete_queue
 call :add_key
 
-%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = 1; $deleteKey = $null; $toggle = 1; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*';iex ($f[1])"
+::  Stop IDM from reaching its validation servers before anything else happens.
+call :block_idm_hosts
 
+::  Step 1 - delete every existing IDM CLSID key, including stale locked ones
+::  left behind by an earlier run. Those block IDM from creating fresh keys,
+::  which is why running activation twice in a row used to fail.
+call :regscan_delete
+
+::  Step 2 - write the serial so IDM validates it and builds fresh CLSID keys.
 if %frz%==0 call :register_IDM
 
+::  Step 3 - trigger a download so IDM actually creates those keys.
 call :download_files
 if not defined _fileexist (
 %eline%
-echo Error: Unable to download test files with IDM.
+echo Error: IDM did not complete the download trigger.
 echo:
 echo For help, visit: %repo%
 goto :done
 )
 
-%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = 1; $deleteKey = $null; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*';iex ($f[1])"
+::  Step 4 - lock the fresh keys before IDM can use them to invalidate the serial.
+call :regscan_lock_toggle
+
+::  Step 5 - final lock pass over anything created in the meantime.
+call :regscan_lock
+
+::  Re-normalize the hosts entries after IDM has run.
+call :block_idm_hosts
 
 echo:
 echo %line%
@@ -996,7 +1023,7 @@ set "fname=!user_fname!"
 set "lname=!user_lname!"
 set "email=!user_email!"
 
-for /f "delims=" %%a in ('%psc% "$key = -join ((Get-Random -Count 20 -InputObject ([char[]]('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'))));$key = ($key.Substring(0, 5) + '-' + $key.Substring(5, 5) + '-' + $key.Substring(10, 5) + '-' + $key.Substring(15, 5) + $key.Substring(20));Write-Output $key" %nul6%') do (set key=%%a)
+for /f "delims=" %%a in ('%psc% "$key = -join ((Get-Random -Count 20 -InputObject ([char[]]('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'))));$key = ($key.Substring(0, 5) + '-' + $key.Substring(5, 5) + '-' + $key.Substring(10, 5) + '-' + $key.Substring(15, 5));Write-Output $key" %nul6%') do (set key=%%a)
 
 echo Registering to: %fname% %lname%
 echo:
@@ -1017,37 +1044,63 @@ exit /b
 :download_files
 
 echo:
-echo Triggering test downloads to initialize registry keys...
+echo Triggering a download to initialize IDM CLSID registry keys...
 echo:
 
-set "file=%SystemRoot%\Temp\temp.png"
+set "file=%_wtemp%\ias_temp.png"
 set _fileexist=
+if exist "%file%" del /f /q "%file%"
 
-set link=https://www.internetdownloadmanager.com/images/idm_box_min.png
+::  Count the CLSID keys before IDM runs, so we can tell afterwards whether it
+::  actually created its validation keys even if the file itself never landed.
+if "%arch%"=="x86" (set "_clsid_reg=HKCU\Software\Classes\CLSID") else (set "_clsid_reg=HKCU\Software\Classes\Wow6432Node\CLSID")
+set /a _base_count=0
+for /f %%C in ('reg query "%_clsid_reg%" 2^>nul ^| find /c "HKEY_"') do set /a _base_count=%%C
+echo Baseline CLSID key count: %_base_count%
+
+::  IDM's own domains are blocked at this point, so pull from neutral hosts.
+::  First one that works wins.
+set link=https://raw.githubusercontent.com/imrosyd/idm-script/main/LICENSE
 call :download
-set link=https://www.internetdownloadmanager.com/register/IDMlib/images/idman_logos.png
+if defined _fileexist goto :dl_done
+
+set link=https://www.google.com/favicon.ico
 call :download
-set link=https://www.internetdownloadmanager.com/pictures/idm_about.png
+if defined _fileexist goto :dl_done
+
+set link=https://github.com/favicon.ico
 call :download
+
+:dl_done
 
 echo:
 timeout /t 3 %nul1%
 %idmcheck% && taskkill /f /im idman.exe
 if exist "%file%" del /f /q "%file%"
+
+set /a _new_count=0
+for /f %%C in ('reg query "%_clsid_reg%" 2^>nul ^| find /c "HKEY_"') do set /a _new_count=%%C
+echo CLSID key count after IDM run: %_new_count%
+
+if %_new_count% GTR %_base_count% (
+echo New CLSID keys created, activation hooks detected.
+set _fileexist=1
+)
+if not defined _fileexist if %_new_count% GTR 0 set _fileexist=1
 exit /b
 
 :download
 
 set /a attempt=0
 if exist "%file%" del /f /q "%file%"
-start "" /B "%IDMan%" /n /d "%link%" /p "%SystemRoot%\Temp" /f temp.png
+start "" /B "%IDMan%" /n /d "%link%" /p "%_wtemp%" /f ias_temp.png
 
 :check_file
 
 timeout /t 1 %nul1%
 set /a attempt+=1
 if exist "%file%" set _fileexist=1&exit /b
-if %attempt% GEQ 20 exit /b
+if %attempt% GEQ 25 exit /b
 goto :check_file
 
 ::========================================================================================================================================
@@ -1075,8 +1128,131 @@ exit /b
 
 ::========================================================================================================================================
 
+:prepare_operation_ui
+
+if not %HKCUsync%==1 (
+if not defined terminal mode 153, 35
+) else (
+if not defined terminal mode 113, 35
+)
+if not defined terminal %psc% "&%_buf%" %nul%
+exit /b
+
+::========================================================================================================================================
+
+:create_clsid_backup
+
+set _time=
+for /f %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do set _time=%%a
+
+echo:
+echo Creating backup of CLSID registry keys in %_wtemp%
+
+if not exist "%_wtemp%" md "%_wtemp%" %nul%
+
+reg export %CLSID% "%_wtemp%\_Backup_HKCU_CLSID_%_time%.reg"
+if not %HKCUsync%==1 reg export %CLSID2% "%_wtemp%\_Backup_HKU-%_sid%_CLSID_%_time%.reg"
+exit /b
+
+::========================================================================================================================================
+
+::  The three registry scanner modes. All three run the same PowerShell block
+::  stored at the end of this file, only the switches differ.
+
+:regscan_delete
+
+%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = $null; $deleteKey = 1; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*'; . ([scriptblock]::create($f[1]))"
+exit /b
+
+:regscan_lock_toggle
+
+%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = 1; $deleteKey = $null; $toggle = 1; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*'; . ([scriptblock]::create($f[1]))"
+exit /b
+
+:regscan_lock
+
+%psc% "$sid = '%_sid%'; $HKCUsync = %HKCUsync%; $lockKey = 1; $deleteKey = $null; $f=[io.file]::ReadAllText('!_batp!') -split ':regscan\:.*'; . ([scriptblock]::create($f[1]))"
+exit /b
+
+::========================================================================================================================================
+
+::  Hosts file handling.
+::
+::  Activation points IDM's validation domains at 0.0.0.0 so IDM cannot phone
+::  home and invalidate the serial. Every line this script writes carries a
+::  "# IAS" marker, and both routines below rewrite the file line by line so
+::  entries the user put there themselves are left untouched.
+::
+::  Reset [3] and Clean Uninstall [7] undo the block, so the change is never
+::  one-way. A copy of the original file is kept in %_wtemp% before the first
+::  modification of each run.
+
+:block_idm_hosts
+
+echo:
+echo Blocking IDM validation servers in hosts file...
+echo:
+
+if not exist "%_hosts%" (
+call :_color %Red% "hosts file not found - skipping"
+exit /b
+)
+
+attrib -R "%_hosts%" %nul1%
+
+if not defined _hostsbak (
+set _hostsbak=1
+for /f %%a in ('%psc% "(Get-Date).ToString('yyyyMMdd-HHmmssfff')"') do copy /y "%_hosts%" "%_wtemp%\_Backup_hosts_%%a.txt" %nul%
+)
+
+%psc% "$h='%_hosts%'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; foreach($x in $d){ $new+=('0.0.0.0 '+$x+'  # IAS') }; Set-Content -LiteralPath $h -Value $new -Encoding ASCII -ErrorAction Stop" %nul%
+
+if errorlevel 1 (
+call :_color %Red% "Failed to write hosts file - is it locked by antivirus?"
+exit /b
+)
+
+for %%D in (
+"tonec.com"
+"www.tonec.com"
+"internetdownloadmanager.com"
+"www.internetdownloadmanager.com"
+"secure.internetdownloadmanager.com"
+"idmmzs.com"
+"www.idmmzs.com"
+"idmzs.com"
+"www.idmzs.com"
+) do echo Blocked - %%~D
+
+ipconfig /flushdns %nul%
+exit /b
+
+:unblock_idm_hosts
+
+if not exist "%_hosts%" exit /b
+
+attrib -R "%_hosts%" %nul1%
+
+%psc% "$h='%_hosts%'; $d=%_idmdom%; $c=@(Get-Content -LiteralPath $h -ErrorAction SilentlyContinue); $new=@(); foreach($ln in $c){ $drop=$false; foreach($x in $d){ if($ln -match ('^\s*#?\s*0\.0\.0\.0\s+'+[regex]::Escape($x)+'(\s|$)')){ $drop=$true; break } }; if(-not $drop){ $new+=$ln } }; if($new.Count -ne $c.Count){ Set-Content -LiteralPath $h -Value $new -Encoding ASCII -ErrorAction SilentlyContinue }" %nul%
+
+ipconfig /flushdns %nul%
+exit /b
+
+::========================================================================================================================================
+
 :regscan:
 $finalValues = @()
+
+::  Privileges are adjusted once here rather than per key. Doing it inside
+::  Take-Permissions meant re-creating the P/Invoke type for every single key,
+::  which is where the intermittent lock failures came from.
+
+$AssemblyBuilder = [AppDomain]::CurrentDomain.DefineDynamicAssembly(4, 1)
+$ModuleBuilder = $AssemblyBuilder.DefineDynamicModule(2, $False)
+$TypeBuilder = $ModuleBuilder.DefineType(0)
+$TypeBuilder.DefinePInvokeMethod('RtlAdjustPrivilege', 'ntdll.dll', 'Public, Static', 1, [int], @([int], [bool], [bool], [bool].MakeByRefType()), 1, 3) | Out-Null
+$PrivilegeClass = $TypeBuilder.CreateType()
+9,17,18 | ForEach-Object { $PrivilegeClass::RtlAdjustPrivilege($_, $true, $false, [ref]$false) | Out-Null }
 
 $arch = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').PROCESSOR_ARCHITECTURE
 if ($arch -eq "x86") {
@@ -1171,12 +1347,6 @@ if (($finalValues.Count -gt 20) -and ($toggle -ne $null)) {
 
 function Take-Permissions {
     param($rootKey, $regKey)
-    $AssemblyBuilder = [AppDomain]::CurrentDomain.DefineDynamicAssembly(4, 1)
-    $ModuleBuilder = $AssemblyBuilder.DefineDynamicModule(2, $False)
-    $TypeBuilder = $ModuleBuilder.DefineType(0)
-
-    $TypeBuilder.DefinePInvokeMethod('RtlAdjustPrivilege', 'ntdll.dll', 'Public, Static', 1, [int], @([int], [bool], [bool], [bool].MakeByRefType()), 1, 3) | Out-Null
-    9,17,18 | ForEach-Object { $TypeBuilder.CreateType()::RtlAdjustPrivilege($_, $true, $false, [ref]$false) | Out-Null }
 
     $SID = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
     $IDN = ($SID.Translate([System.Security.Principal.NTAccount])).Value
@@ -1185,26 +1355,32 @@ function Take-Permissions {
     $everyone = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
     $none = New-Object System.Security.Principal.SecurityIdentifier('S-1-0-0')
 
-    $key = [Microsoft.Win32.Registry]::$rootKey.OpenSubKey($regkey, 'ReadWriteSubTree', 'TakeOwnership')
+    try {
+        $key = [Microsoft.Win32.Registry]::$rootKey.OpenSubKey($regkey, 'ReadWriteSubTree', 'TakeOwnership')
+        if ($null -eq $key) { return }
 
-    $acl = New-Object System.Security.AccessControl.RegistrySecurity
-    $acl.SetOwner($Admin)
-    $key.SetAccessControl($acl)
-
-    $key = $key.OpenSubKey('', 'ReadWriteSubTree', 'ChangePermissions')
-    $rule = New-Object System.Security.AccessControl.RegistryAccessRule($everyone, 'FullControl', 'ContainerInherit', 'None', 'Allow')
-    $acl.ResetAccessRule($rule)
-    $key.SetAccessControl($acl)
-
-    if ($lockKey -ne $null) {
         $acl = New-Object System.Security.AccessControl.RegistrySecurity
-        $acl.SetOwner($none)
+        $acl.SetOwner($Admin)
         $key.SetAccessControl($acl)
 
         $key = $key.OpenSubKey('', 'ReadWriteSubTree', 'ChangePermissions')
-        $rule = New-Object System.Security.AccessControl.RegistryAccessRule($everyone, 'FullControl', 'Deny')
+        $rule = New-Object System.Security.AccessControl.RegistryAccessRule($everyone, 'FullControl', 'ContainerInherit', 'None', 'Allow')
         $acl.ResetAccessRule($rule)
         $key.SetAccessControl($acl)
+
+        if ($lockKey -ne $null) {
+            $acl = New-Object System.Security.AccessControl.RegistrySecurity
+            $acl.SetOwner($none)
+            $key.SetAccessControl($acl)
+
+            $key = $key.OpenSubKey('', 'ReadWriteSubTree', 'ChangePermissions')
+            $rule = New-Object System.Security.AccessControl.RegistryAccessRule($everyone, 'FullControl', 'Deny')
+            $acl.ResetAccessRule($rule)
+            $key.SetAccessControl($acl)
+        }
+    } catch {
+        # A key that vanishes mid-scan or is protected beyond our reach must not
+        # take the whole scan down with it.
     }
 }
 

@@ -60,10 +60,15 @@ irm s.id/idm-script | iex
 
 ## How It Works
 
-1. **Registry Backup**: Creates automatic backups in `%SystemRoot%\Temp`
-2. **Registry Scan**: Intelligently detects and processes IDM-related registry keys
-3. **Activation**: Applies registration details or freezes trial period
-4. **Verification**: Tests download functionality to ensure proper activation
+1. **Backup**: Exports the CLSID registry keys and copies the hosts file to `%SystemRoot%\Temp`
+2. **Host Block**: Points IDM's validation domains at `0.0.0.0` so IDM cannot phone home
+3. **Clean Slate**: Deletes every existing IDM CLSID key, including locked ones left by an earlier run
+4. **Registration**: Writes your name and a serial, or skips this for Freeze Trial
+5. **Trigger**: Makes IDM download a small test file so it rebuilds its CLSID keys
+6. **Lock**: Takes ownership of the fresh keys and denies write access, so IDM can never revoke them
+
+Steps 3 and 6 are why activation can now be run repeatedly. Earlier versions locked
+the keys without deleting the old ones first, so a second run had nothing to work with.
 
 ## Recommendations
 
@@ -83,6 +88,11 @@ The script includes automatic fixes for common issues:
 | PowerShell restricted | Automatically sets execution policy to Bypass |
 | WMI not working | Automatically restarts winmgmt service |
 | Internet connection | Retries 3 times with DNS cache flush |
+
+**Cannot reach internetdownloadmanager.com in the browser after activation**
+
+That is the hosts block doing its job. Run Reset [3] to remove it, or edit
+`%SystemRoot%\System32\drivers\etc\hosts` and delete the lines marked `# IAS`.
 
 ### Manual Fixes (if auto-fix fails)
 
@@ -104,9 +114,39 @@ net start winmgmt
 
 ## Security
 
-- Script creates registry backups before any modifications
-- All operations are performed locally
-- No data is sent to external servers (except IDM's own servers for testing)
+- No usage data, telemetry, or personal information is ever sent anywhere
+- The registration name you type stays in your local registry only
+
+### What Gets Changed On Your System
+
+| Change | Where | Undo |
+|--------|-------|------|
+| CLSID registry keys (deleted, then re-created and locked) | `HKCU\Software\Classes\Wow6432Node\CLSID` | Reset [3] |
+| Registration name, e-mail, serial | `HKCU\Software\DownloadManager` | Reset [3] |
+| **hosts file** — 9 IDM domains pointed at `0.0.0.0` | `%SystemRoot%\System32\drivers\etc\hosts` | Reset [3] or Clean Uninstall [7] |
+
+Backups are written to `%SystemRoot%\Temp` before anything is modified:
+`_Backup_HKCU_CLSID_<timestamp>.reg` and `_Backup_hosts_<timestamp>.txt`.
+
+### About The hosts File
+
+Activation blocks `tonec.com`, `internetdownloadmanager.com`, `idmzs.com`, `idmmzs.com`
+and their `www`/`secure` variants. Without this, IDM contacts its servers, finds the
+serial invalid, and undoes the activation.
+
+Every line the script adds is marked with `# IAS`, and both routines rewrite the file
+line by line, so entries you put there yourself are left alone. **This is fully
+reversible** — run Reset [3] or Clean Uninstall [7] and the entries are removed.
+
+Side effect worth knowing: while the block is active you cannot open
+`internetdownloadmanager.com` in a browser. Menu [4] Install/Update lifts the block
+automatically before downloading the installer.
+
+### Network Connections
+
+- `github.com` / `raw.githubusercontent.com` — connectivity check, test download, update check [8]
+- `www.google.com` — fallback test download
+- `mirror2.internetdownloadmanager.com` — IDM installer, menu [4] only
 
 ## Compatibility
 

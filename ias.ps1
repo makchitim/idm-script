@@ -19,6 +19,14 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Info { param([string]$msg) Write-Host "[INFO] $msg" }
 function Write-Err { param([string]$msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
+function Write-Warn { param([string]$msg) Write-Host "[WARN] $msg" -ForegroundColor Yellow }
+
+function Test-SecureUrl {
+    param([string]$Url)
+    if ($Url -and $Url -notmatch '^https://') {
+        throw "Refusing to download over an insecure URL: $Url"
+    }
+}
 
 function Initialize-Environment {
     try {
@@ -115,7 +123,15 @@ function Repair-LineEndings {
 function Confirm-FileHash {
     param([string]$Path, [string]$Hash, [switch]$Skip)
     
-    if (-not $Hash -or $Skip) { return }
+    if ($Skip) {
+        Write-Warn "Hash verification skipped by request - the downloaded script is NOT verified."
+        return
+    }
+    if (-not $Hash) {
+        Write-Warn "No -ExpectedHash was supplied, so the downloaded script is NOT verified."
+        Write-Warn "Pass -ExpectedHash <sha256> to check integrity before it runs."
+        return
+    }
     
     if (-not (Test-FileIntegrity -Path $Path -ExpectedHash $Hash)) {
         throw "Hash verification failed"
@@ -125,6 +141,9 @@ function Confirm-FileHash {
 
 function Invoke-Main {
     if (-not $DownloadURL) { Write-Err "Download URL required"; exit 1 }
+    
+    Test-SecureUrl $DownloadURL
+    Test-SecureUrl $FallbackURL
     
     Initialize-Environment
     $FilePath = Get-SafeTempFilePath
