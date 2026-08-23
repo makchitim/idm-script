@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **IDM host blocking**, ported from upstream and extended. Activation points the nine
+  IDM validation domains at `0.0.0.0` so IDM cannot phone home and revoke the serial.
+  Unlike upstream this is reversible: every line carries a `# IAS` marker, the original
+  hosts file is backed up to `%SystemRoot%\Temp` before the first change of each run,
+  and both Reset [3] and Clean Uninstall [7] remove the entries again. The rewrite is
+  line by line, so hosts entries the user added themselves are preserved.
+- **Helper subroutines** `:prepare_operation_ui`, `:create_clsid_backup`,
+  `:regscan_delete`, `:regscan_lock`, `:regscan_lock_toggle`, `:block_idm_hosts`,
+  `:unblock_idm_hosts` — replacing blocks that were copy-pasted between Activate,
+  Reset and Clean Uninstall.
+- **IDM status line in the menu** — "Not installed" / "Installed, not registered" /
+  "Installed and registered", reusing lookups the script already does during
+  bootstrap, no extra registry queries.
+- **Self-update validation.** Check Script Update [8] now rejects an empty download,
+  normalizes line endings to CRLF the same way `ias.ps1` already does for its own
+  downloads, and requires the first line to look like an IAS script before installing
+  anything. A copy of the previous script is kept at `%TEMP%\ias_previous.cmd`.
+
+### Changed
+- **Activation is now a five-step flow** matching upstream: block hosts, delete every
+  existing CLSID key (including stale locked ones from an earlier run), write the
+  serial, trigger the download, then lock. Previously the keys were locked without
+  being deleted first, so a second activation run had nothing left to work with.
+- **Test downloads pull from neutral hosts** (`raw.githubusercontent.com`,
+  `google.com`, `github.com`) instead of IDM's own servers, which are blocked at that
+  point, and success is now confirmed by counting CLSID keys before and after the run
+  rather than by the presence of the downloaded file alone.
+- **Connectivity check probes `github.com`** instead of `internetdownloadmanager.com`,
+  which the script blocks on purpose.
+- **Install / Update [4] lifts the hosts block** before downloading the installer, and
+  resolves the current IDM build from the official download page instead of using a
+  hardcoded `idman642build25.exe`, falling back to that build if the page can't be parsed.
+- **Menu redesigned to a single column** that fits the window. It previously rendered
+  30 lines into a `mode 76, 28` window (28 rows), so the top of the banner scrolled
+  out of view every time the menu was drawn; separator widths were also inconsistent
+  (49/58/62 columns). The window is now `mode 76, 29` and actual output is 27 lines.
+  The "<< recommended" tag on Freeze Trial was removed from the menu at the same time.
+- **Backup Settings uses a locale-proof, collision-proof timestamp.** The old
+  `%date%`-substring filename assumed a US date format and only had day precision, so
+  a second backup on the same day silently overwrote the first.
+- **Restore Settings asks for confirmation** before overwriting the live IDM
+  registration, and reports "Invalid selection" instead of silently doing nothing
+  when the chosen number doesn't match any listed backup.
+- Registry backups go to `%_wtemp%`, which falls back from `%SystemRoot%\Temp` to
+  `%TEMP%` if the first is not writable.
+- Argument parsing uses `%%~A` over `%*` instead of stripping every quote from `%*`.
+- All embedded PowerShell is invoked through `. ([scriptblock]::create(...))` instead
+  of `iex`.
+- `ias.ps1` warns instead of staying silent when integrity is not verified. With no
+  `-ExpectedHash` (the default for `irm ... | iex`), it now says so explicitly, and it
+  refuses any download URL that is not `https://`.
+- Registration name and e-mail (both the Activate and Install/Update prompts) are
+  stripped of the `"` character before being embedded in a quoted `reg.exe` argument.
+  A stray quote in a typed name could otherwise unbalance the quoting and expose the
+  rest of the line to cmd.exe.
+- Dropped the dead `+ $key.Substring(20)` from serial generation — on a 20-character
+  string it always produced an empty string, a leftover from a 25-character version.
+- Documentation consolidated into `README.md`; `project_summary.md` removed (see
+  Removed).
+
 ### Fixed
 - **Clean Uninstall no longer wipes the whole CLSID branch.** It used to run
   `reg delete "HKCU\Software\Classes\Wow6432Node\CLSID" /f`, which removes the COM
@@ -24,49 +85,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now set up once instead of rebuilding the P/Invoke type for every key, `Take-Permissions`
   returns early on a null key, and the whole routine is wrapped in try/catch, so one
   protected key cannot stop the scan. Ported from upstream v3.1.1.
+- **Two `try { ... }` blocks were missing a `catch`/`finally` clause** — a hard
+  PowerShell syntax error, not a no-op. Both silently produced no output on every
+  run, so the update checker always reported "using the latest version" regardless
+  of what was actually on GitHub, and Install/Update's installer-URL resolution
+  always fell back to the hardcoded build. Found by widening the syntax check to
+  scan every embedded PowerShell one-liner in the file, including the ones inside
+  `for /f (...)`, which an earlier pass had missed.
 
-### Added
-- **IDM host blocking**, ported from upstream and extended. Activation points the nine
-  IDM validation domains at `0.0.0.0` so IDM cannot phone home and revoke the serial.
-  Unlike upstream this is reversible: every line carries a `# IAS` marker, the original
-  hosts file is backed up to `%SystemRoot%\Temp` before the first change of each run,
-  and both Reset [3] and Clean Uninstall [7] remove the entries again. The rewrite is
-  line by line, so hosts entries the user added themselves are preserved.
-- **Helper subroutines** `:prepare_operation_ui`, `:create_clsid_backup`,
-  `:regscan_delete`, `:regscan_lock`, `:regscan_lock_toggle`, `:block_idm_hosts`,
-  `:unblock_idm_hosts` — replacing blocks that were copy-pasted between Activate,
-  Reset and Clean Uninstall.
-
-### Changed
-- **Activation is now a five-step flow** matching upstream: block hosts, delete every
-  existing CLSID key (including stale locked ones from an earlier run), write the
-  serial, trigger the download, then lock. Previously the keys were locked without
-  being deleted first, so a second activation run had nothing left to work with.
-- **Test downloads pull from neutral hosts** (`raw.githubusercontent.com`,
-  `google.com`, `github.com`) instead of IDM's own servers, which are blocked at that
-  point, and success is now confirmed by counting CLSID keys before and after the run
-  rather than by the presence of the downloaded file alone.
-- **Connectivity check probes `github.com`** instead of `internetdownloadmanager.com`,
-  which the script blocks on purpose.
-- **Install / Update [4] lifts the hosts block** before downloading the installer.
-- Registry backups go to `%_wtemp%`, which falls back from `%SystemRoot%\Temp` to
-  `%TEMP%` if the first is not writable.
-- Argument parsing uses `%%~A` over `%*` instead of stripping every quote from `%*`.
-- All embedded PowerShell is invoked through `. ([scriptblock]::create(...))` instead
-  of `iex`.
-- Dropped the dead `+ $key.Substring(20)` from serial generation — on a 20-character
-  string it always produced an empty string, a leftover from a 25-character version.
-
-### Changed (earlier in this cycle)
-- **Install / Update [4] resolves the current IDM build** from the official download
-  page instead of using a hardcoded `idman642build25.exe`, falling back to that build
-  if the page cannot be parsed.
-- **`ias.ps1` warns instead of staying silent when integrity is not verified.** With no
-  `-ExpectedHash` (the default for `irm ... | iex`), it now says so explicitly, and it
-  refuses any download URL that is not `https://`.
-- Documentation: corrected the line-count and version figures in `project_summary.md`,
-  and replaced the inaccurate "no external server communication" claim in both
-  `README.md` and `project_summary.md` with the actual list of hosts contacted.
+### Removed
+- `project_summary.md`. It duplicated README content and had already drifted out of
+  sync with it (stale version number, stale menu options, stale line counts).
+  README.md is now the single source of truth for what this project is and does.
 
 ---
 
