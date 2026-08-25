@@ -1,4 +1,4 @@
-@set iasver=3.4.0
+@set iasver=3.5.0
 @setlocal DisableDelayedExpansion
 @echo off
 
@@ -1009,6 +1009,14 @@ call :regscan_delete
 ::  Step 2 - write the serial so IDM validates it and builds fresh CLSID keys.
 if %frz%==0 call :register_IDM
 
+::  Newer IDM builds can pop their own "...Registration" dialog once a Serial
+::  is present and the validation servers are unreachable. It doesn't stop
+::  the CLSID keys from being created - the script force-kills IDM a bit
+::  later regardless - but it sits on screen for the whole download-trigger
+::  step otherwise. Only Activate writes a Serial, so only Activate needs
+::  the watcher; Freeze never shows this prompt.
+if %frz%==0 call :watch_reg_popup
+
 ::  Step 3 - trigger a download so IDM actually creates those keys.
 call :download_files
 if not defined _fileexist (
@@ -1187,6 +1195,16 @@ if %_new_count% GTR %_base_count% (
 echo New CLSID keys created, activation hooks detected.
 set _fileexist=1
 )
+exit /b
+
+:watch_reg_popup
+
+::  Fire-and-forget: closes IDM's own "Registration" dialog the moment it
+::  appears, for as long as download_files could plausibly still be running
+::  (three links, 25 x ~1s polls each, plus a few seconds of overhead).
+::  CloseMainWindow sends the same signal as clicking the window's own
+::  close button - it does not touch the CLSID keys or the serial.
+start "" /B %psc% "$sw=[Diagnostics.Stopwatch]::StartNew();while($sw.Elapsed.TotalSeconds -lt 150){Get-Process -Name idman -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -match 'Registration'} | ForEach-Object {$_.CloseMainWindow() | Out-Null};Start-Sleep -Milliseconds 500}" %nul%
 exit /b
 
 :download

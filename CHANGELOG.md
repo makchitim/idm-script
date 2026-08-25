@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-08-25
+
+### Added
+- **Activate auto-dismisses IDM's own "...Registration" popup.** Newer IDM
+  builds can pop this dialog once a Serial is present and the validation
+  servers are blocked. It never stopped the CLSID keys from being created -
+  the script force-kills IDM a bit later regardless - but it sat on screen,
+  visible and alarming, for the whole download-trigger step. A background
+  watcher (`:watch_reg_popup`) now closes it the moment it appears by
+  sending the same signal as clicking the window's own close button, for as
+  long as the download-trigger step could plausibly still be running.
+  Freeze never writes a Serial, so it never shows this prompt and doesn't
+  need the watcher.
+
 ## [3.4.0] - 2026-08-25
 
 ### Fixed
