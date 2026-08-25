@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-08-25
+
+### Fixed
+- **Activate now disables IDM's own auto-update check** by setting
+  `CheckUpdtVM` to `0` in `HKCU\Software\DownloadManager` (and the matching
+  `HKU\<sid>` key when the profile isn't syncing). Left on, IDM's built-in
+  updater eventually replaces the CLSID keys this script locks and can ship
+  stronger tamper detection, which is what turns a previously-working
+  activation into a "Fake serial number" prompt days or weeks later with no
+  action taken by the user in between. Reset [3] and Clean Uninstall [7]
+  remove `CheckUpdtVM` along with the other registration keys, so it doesn't
+  outlive the registration it was tied to.
+
 ## [3.3.0] - 2026-08-23
 
 ### Added

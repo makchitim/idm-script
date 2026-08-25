@@ -1,4 +1,4 @@
-@set iasver=3.3.0
+@set iasver=3.4.0
 @setlocal DisableDelayedExpansion
 @echo off
 
@@ -856,6 +856,7 @@ for %%# in (
 ""HKCU\Software\DownloadManager" "/v" "LName""
 ""HKCU\Software\DownloadManager" "/v" "Email""
 ""HKCU\Software\DownloadManager" "/v" "Serial""
+""HKCU\Software\DownloadManager" "/v" "CheckUpdtVM""
 ""HKCU\Software\DownloadManager" "/v" "scansk""
 ""HKCU\Software\DownloadManager" "/v" "tvfrdt""
 ""HKCU\Software\DownloadManager" "/v" "radxcnt""
@@ -872,6 +873,7 @@ if not %HKCUsync%==1 for %%# in (
 ""HKU\%_sid%\Software\DownloadManager" "/v" "LName""
 ""HKU\%_sid%\Software\DownloadManager" "/v" "Email""
 ""HKU\%_sid%\Software\DownloadManager" "/v" "Serial""
+""HKU\%_sid%\Software\DownloadManager" "/v" "CheckUpdtVM""
 ""HKU\%_sid%\Software\DownloadManager" "/v" "scansk""
 ""HKU\%_sid%\Software\DownloadManager" "/v" "tvfrdt""
 ""HKU\%_sid%\Software\DownloadManager" "/v" "radxcnt""
@@ -1123,11 +1125,18 @@ set "reg=HKCU\SOFTWARE\DownloadManager /v LName /t REG_SZ /d "%lname%"" & call :
 set "reg=HKCU\SOFTWARE\DownloadManager /v Email /t REG_SZ /d "%email%"" & call :_rcont
 set "reg=HKCU\SOFTWARE\DownloadManager /v Serial /t REG_SZ /d "%key%"" & call :_rcont
 
+::  IDM's own auto-update replaces the CLSID keys this script locks and can
+::  bring in stronger tamper detection, which is what turns a working
+::  activation into "Fake serial number" days or weeks later. Turning this
+::  off keeps IDM on the build the activation was actually tested against.
+set "reg=HKCU\SOFTWARE\DownloadManager /v CheckUpdtVM /t REG_DWORD /d "0"" & call :_rcont
+
 if not %HKCUsync%==1 (
 set "reg=HKU\%_sid%\SOFTWARE\DownloadManager /v FName /t REG_SZ /d "%fname%"" & call :_rcont
 set "reg=HKU\%_sid%\SOFTWARE\DownloadManager /v LName /t REG_SZ /d "%lname%"" & call :_rcont
 set "reg=HKU\%_sid%\SOFTWARE\DownloadManager /v Email /t REG_SZ /d "%email%"" & call :_rcont
 set "reg=HKU\%_sid%\SOFTWARE\DownloadManager /v Serial /t REG_SZ /d "%key%"" & call :_rcont
+set "reg=HKU\%_sid%\SOFTWARE\DownloadManager /v CheckUpdtVM /t REG_DWORD /d "0"" & call :_rcont
 )
 exit /b
 
